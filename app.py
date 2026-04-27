@@ -859,7 +859,10 @@ def generate_pdf(data: dict, rca_content: str, uploaded_image: bytes = None) -> 
 
 # ── BOKU RCA Generator ────────────────────────────────────────────────────────
 def generate_boku_rca(data: dict) -> str:
-    return """Incident details
+    heading = data.get('heading', '')
+    issue = data.get('issue', '')
+    
+    template = f"""Incident details
 
 INC Number:
 
@@ -875,9 +878,12 @@ What was root cause of the issue?
 (Describe as much details as possible)
 
 Do you have monitoring in place?
+(Yes/No)
 
 How do you plan to prevent this issue in future?
-(Preventive action)""".format(heading=data['heading'], issue=data['issue'])
+(Preventive action)"""
+    
+    return template
 
 
 # ── Claude RCA Generator ──────────────────────────────────────────────────────────
