@@ -9,16 +9,19 @@ from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 
-# ── Groq API Key ─────────────────────────────────────────────────────────────
-GROQ_API_KEY = "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"   # 👈 Yahan apni Groq key daalo
-
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ──────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Auto RCA Generator",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# ── Use secrets for API key (production) or fallback to hardcoded ──────────────
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except (KeyError, FileNotFoundError):
+    GROQ_API_KEY = "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"
 
 # ── Merchant data ─────────────────────────────────────────────────────────────
 
@@ -771,35 +774,40 @@ def generate_pdf(data: dict, rca_content: str, uploaded_image: bytes = None) -> 
 
 
 
-    # Generate document number and metadata
-    doc_number = data.get('doc_number', generate_document_number())
-    
-    # Meta info table
-    meta_rows = [
-        ['Service Impacted:', data['merchant']],
-        ['Region:', data['region']],
-        ['Date:', data['date_str']],
-        ['Report Type:', data['report_type'] if 'report_type' in data else data['rca_type'].upper()],
-        ['Document Number:', doc_number],
-        ['Custody:', 'Service Delivery'],
-        ['Incident Manager:', '@Qwais Khalid'],
-        ['Heading:', data['heading']],
-    ]
-    meta_table_data = [[
-        Paragraph(r[0], meta_key_style),
-        Paragraph(r[1], meta_val_style)
-    ] for r in meta_rows]
-    meta_table = Table(meta_table_data, colWidths=[40*mm, 125*mm])
-    meta_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#e8eaf6')),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#c5cae9')),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-        ('LEFTPADDING', (0,0), (-1,-1), 6),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    story.append(meta_table)
-    story.append(Spacer(1, 5*mm))
+    # Skip meta table for BOKU reports
+    if not data.get('use_boku_template', False):
+        # Generate document number and metadata
+        doc_number = data.get('doc_number', generate_document_number())
+        
+        # Meta info table
+        meta_rows = [
+            ['Service Impacted:', data['merchant']],
+            ['Region:', data['region']],
+            ['Date:', data['date_str']],
+            ['Report Type:', data['report_type'] if 'report_type' in data else data['rca_type'].upper()],
+            ['Document Number:', doc_number],
+            ['Custody:', 'Service Delivery'],
+            ['Incident Manager:', '@Qwais Khalid'],
+            ['Heading:', data['heading']],
+        ]
+        meta_table_data = [[
+            Paragraph(r[0], meta_key_style),
+            Paragraph(r[1], meta_val_style)
+        ] for r in meta_rows]
+        meta_table = Table(meta_table_data, colWidths=[40*mm, 125*mm])
+        meta_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#e8eaf6')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#c5cae9')),
+            ('TOPPADDING', (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING', (0,0), (-1,-1), 6),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ]))
+        story.append(meta_table)
+        story.append(Spacer(1, 5*mm))
+    else:
+        # For BOKU, add minimal spacing
+        story.append(Spacer(1, 2*mm))
 
     # Parse and render RCA content
     lines = rca_content.strip().split('\n')
@@ -851,52 +859,25 @@ def generate_pdf(data: dict, rca_content: str, uploaded_image: bytes = None) -> 
 
 # ── BOKU RCA Generator ────────────────────────────────────────────────────────
 def generate_boku_rca(data: dict) -> str:
-    return """Service Impacted
-JazzCash BOKU Collection - {merchant}
+    return """Incident details
 
-Date
-{date_str}
+INC Number:
 
-Incident Summary
-Transactions were failing due to an OTP delivery issue at the operator end. Users were unable to receive the OTP required to complete the transaction flow. As a result, transactions were getting failed at the hosted (tokenization) page of JazzCash (JC), as the end users could not proceed with OTP submission and verification. This issue impacted the successful completion of the payment flow and led to transaction failures from the user side, despite the transaction being successfully initiated.
+Service Impacted:
+{heading}
 
-Issue Observed
-* OTP delivery failures at operator end
-* Users unable to receive OTP for transaction verification
-* Transactions stuck at hosted page (tokenization) flow
-* End users unable to proceed with OTP submission
+Impact Details:
+{issue}
 
-Impact Details
-* Hosted page transaction failures
-* User-side transaction failures despite successful initiation
-* Disrupted payment completion flow
-* Impacted user experience and transaction success rate
+Steps were taken to resolve the issue.
 
-Root Cause Analysis
-* Operator-side OTP delivery issue at JazzCash end
-* Users could not receive OTP
-* Prevention of hosted page/tokenization flow completion
+What was root cause of the issue?
+(Describe as much details as possible)
 
-Actions Taken
-* Monitored issue and correlated with operator-side OTP delivery degradation
-* Reviewed transaction flow logs and hosted page attempts
-* Confirmed requests initiated successfully but OTP not received
-* Escalated issue to operator team
-* Performed continuous monitoring until OTP delivery stabilized
+Do you have monitoring in place?
 
-Current Status
-The issue has been resolved through operator team intervention. OTP delivery has stabilized and transaction flows have returned to normal.
-
-Monitoring
-Yes — Continuous monitoring and alerting in place
-
-Recommendations
-* Implement monitoring and alerting for hosted page failures
-* Detection of OTP-related drop-offs and anomalies
-* Set threshold-based alerts for OTP delivery degradation
-* Establish faster escalation procedures to operator team
-* Maintain continuous monitoring for prevention of future occurrences
-""".format(merchant=data['merchant'], date_str=data['date_str'])
+How do you plan to prevent this issue in future?
+(Preventive action)""".format(heading=data['heading'], issue=data['issue'])
 
 
 # ── Claude RCA Generator ──────────────────────────────────────────────────────────
